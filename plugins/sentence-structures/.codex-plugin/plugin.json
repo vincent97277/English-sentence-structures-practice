@@ -1,6 +1,6 @@
 {
   "name": "sentence-structures",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local English sentence practice with Codex dictation, durable sessions and reviewed material imports.",
   "author": {
     "name": "Vincent Lin"

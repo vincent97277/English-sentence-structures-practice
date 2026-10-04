@@ -12,7 +12,7 @@ python3 plugins/sentence-structures/scripts/setup_plugin.py --root "$PWD" --code
 
 Codex desktop 的 CLI 可使用 `/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`。設定使用專案 `.agents/plugins/marketplace.json` 及 `.codex/config.toml`，全域 enabled=false，僅本專案 enabled=true。安裝程式保留其他 marketplace／config entries；若 marketplace 身份不同會停止。首次安裝會將本專案設為 trusted，因為 Codex 只在 trusted 專案載入專案設定；不改 sandbox 或 approval 設定，也沒有 hooks。
 
-上述設定方式依 [OpenAI plugin 文件](https://developers.openai.com/plugins/build/plugins) 和 [專案設定文件](https://developers.openai.com/codex/config-basic/)。修改 source 後同步兩份 manifests 的 semver，再使用正式安裝流程，不直接改快取。需要重新啟動桌面 app／開新聊天以載入更新；不要在進行中的聊天假設新 skill 已被發現。
+上述設定方式依 [OpenAI plugin 文件](https://developers.openai.com/plugins/build/plugins) 和 [專案設定文件](https://developers.openai.com/codex/config-basic/)。修改 source 後同步兩份 manifests 的 semver，再使用正式安裝流程，不直接改快取。可用 scripts/verify_plugin.py --root "$PWD" --codex codex 透過新程序唯讀驗證主 skill 發現。需要重新啟動桌面 app／開新聊天以載入更新；不要在進行中的聊天假設新 skill 已被發現。
 
 ## 公開操作
 

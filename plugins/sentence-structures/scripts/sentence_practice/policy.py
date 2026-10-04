@@ -8,6 +8,14 @@ POLICY = "local-practice-v1"
 STATES = ["New", "Learning", "Usable", "Automatic"]
 
 
+def affects_learning(record: Dict[str, Any], test_mode: bool) -> bool:
+    return not record.get("synthetic", False) or test_mode
+
+
+def blocks_target(weakness: Dict[str, Any], target: str) -> bool:
+    return weakness.get("status") == "active" and bool(weakness.get("blocking")) and (weakness.get("scope") == "global" or any(o.get("target") == target for o in weakness.get("opportunities", [])))
+
+
 def local_day(at: str) -> str:
     instant = datetime.fromisoformat(at)
     if instant.tzinfo is None:
@@ -93,7 +101,7 @@ def project(current: Dict[str, Any], history: List[Dict[str, Any]], progress: Di
         local = [r["frames"][target] for r in history if r.get("policy") == POLICY and target in r.get("frames", {})] + [evidence]
         productions = [p for f in local for p in f["productions"]]
         passes = [p for p in productions if succeeded(p)]
-        blockers = any(w.get("status") == "active" and w.get("blocking") and (w.get("scope") == "global" or any(o["target"] == target for o in w.get("opportunities", []))) for w in ledger.values())
+        blockers = any(blocks_target(w, target) for w in ledger.values())
         demote = len(relevant) >= 2 and all(f.get("first") == "fail" for f in relevant[-2:])
         state = before["state"]
         if demote:
@@ -101,7 +109,7 @@ def project(current: Dict[str, Any], history: List[Dict[str, Any]], progress: Di
         elif state == "New":
             state = "Learning"
         elif evidence["full_success"] and not blockers:
-            success_sessions = sum(f.get("independent_uses", 0) > 0 for f in local)
+            success_sessions = sum(bool(f.get("full_success")) for f in local)
             delayed_sessions = sum(any(p["delayed"] and succeeded(p) for p in f["productions"]) for f in local)
             if state == "Learning" and success_sessions >= 2 and len(passes) >= 3 and len({p["context"] for p in passes}) >= 2 and delayed_sessions >= 1:
                 state = "Usable"

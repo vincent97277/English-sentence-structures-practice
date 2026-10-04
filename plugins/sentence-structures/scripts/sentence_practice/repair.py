@@ -4,7 +4,7 @@ import uuid
 from copy import deepcopy
 from typing import Any, Dict
 from .materials import digest, encoded
-from .policy import POLICY, frame, project
+from .policy import POLICY, affects_learning, frame, project
 
 
 def accepted(db: Any) -> Any:
@@ -62,20 +62,19 @@ def preview(api: Any, db: Any, payload: Dict[str, Any]) -> Dict[str, Any]:
     replay.update(baseline)
     ledger: Dict[str, Any] = {}
     prior: Any = []
-    marker = json.loads((api.root / "data/project.json").read_text())
+    marker = api.marker
     for item in history:
-        if item.get("policy") == POLICY and (marker["test_mode"] or not item.get("synthetic")):
+        if item.get("policy") == POLICY and affects_learning(item, marker["test_mode"]):
             changes, ledger = project(item, prior, replay, ledger)
             for identifier, change in changes.items():
                 replay[identifier] = change["after"]
-        if marker["test_mode"] or not item.get("synthetic"):
+        if affects_learning(item, marker["test_mode"]) and item.get("frames"):
             prior.append(item)
     plan = {identifier: {"before": before, "after": replay[identifier]} for identifier, before in current.items() if before != replay[identifier]}
     correction_id = uuid.uuid4().hex
     correction = {"id": correction_id, "status": "Proposed", "session_id": identity, "attempt_id": payload["attempt_id"], "original": original, "text": payload["text"], "reason": payload["reason"], "at": api.clock(), "assessment": assessment, "changes": plan, "weaknesses": ledger, "effective_results": {r["session_id"]: r for r in history}, "basis": basis(db)}
     db.execute("INSERT INTO repairs VALUES (?,?)", (correction_id, encoded(correction)))
-    correction["basis"] = basis(db)
-    # Basis excludes this proposal itself on acceptance via explicit comparison.
+    # Acceptance compares the original basis while excluding this proposal.
     return {"repair_id": correction_id, "changes": plan, "corrected_result": effective, "confirmation_required": True}
 
 

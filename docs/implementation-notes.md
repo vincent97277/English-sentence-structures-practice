@@ -10,6 +10,6 @@
 
 自動化驗收透過公開操作入口和隔離 SQLite，涵蓋開始／保存／接續／收尾、重送／衝突／併發、凍結結算失敗恢復、雙軸／提示／重試／更正、24h與暖身界線、升降級、複習日期、弱點建立／解除／重開、教材差異／永久 ID／版本／停用、legacy baseline、標準 schema 與 CLI 身份檢查，以及完整匯出／獨立還原／損毀拒絕／保留較新成果。合成資料不影響正式投影或最近練習基準。
 
-安裝已使用正式 Codex local marketplace 流程；全域停用、本專案設定啟用。CLI 已確認 installed/enabled。桌面新聊天的 skill 發現、自然語言教學，以及使用者聽寫／跨聊天接續仍需共同實測，不能由文字測試冒充。沒有驗證發音或實機斷電。
+安裝已使用正式 Codex local marketplace 流程；全域停用、本專案設定啟用。CLI 已確認 installed/enabled，另由全新 Codex app-server 的 skills/list 驗證主 skill 確實可被發現（無建立 agent 聊天）。桌面新聊天的 skill 發現、自然語言教學，以及使用者聽寫／跨聊天接續仍需共同實測，不能由文字測試冒充。沒有驗證發音或實機斷電。
 
-本地可讀報告：data/imports/notion-2026-10-05/parity-report.json（詳細核對），data/requests/（公開 CLI 請求與發布讀回），data/backups/（含發布前 checkpoint）。標準／規格兩軸 code-review 結果與最終自動驗證結果在交付時補記。
+本地可讀報告：data/imports/notion-2026-10-05/parity-report.json（詳細核對），data/requests/（公開 CLI 請求與發布讀回），data/backups/（含發布前 checkpoint）。[兩軸審查](code-review.md) 共2項維護問題與4項規格／後續關聯問題，均已修正並經獨立複查；最終公開操作測試28個、mypy通過。

@@ -64,3 +64,26 @@ class ImportTests(RuntimeFixture):
             invalid={**pack,"items":[{**pack['items'][0],**mutation}]}
             with self.assertRaises(ValueError):
                 self.call("preview_materials",pack=invalid)
+
+    def test_preparation_only_sessions_do_not_force_new_material(self):
+        self.migrate()
+        pack={"format":"sentence-materials/v1","source":"new","items":[{"pattern":"new","purpose":"新用法","examples":["This works."]}]}
+        preview=self.call("preview_materials",pack=pack)
+        self.call("accept_materials",preview_id=preview["preview_id"])
+        for _ in range(2):
+            session=self.call("start")
+            self.call("finish",session_id=session["id"])
+        self.assertEqual(self.call("start")["purpose"],"review")
+
+    def test_primary_cue_does_not_cancel_unrelated_secondary_retrieval(self):
+        self.migrate()
+        session=self.call("start")
+        secondary=session["secondary"]["id"]
+        question=self.call("question",session_id=session["id"],target=secondary,text="舊句型情境",context="旅遊")
+        self.call("cue",session_id=session["id"],target=session["primary"],scope="target",text="主句型的提示，與穿插句型不同")
+        answer=self.call("answer",session_id=session["id"],question_id=question["id"],text="correct secondary response")
+        self.call("assess",session_id=session["id"],attempt_id=answer["id"],target="pass",expression="pass",hints="none",reason="different target was independently retrieved")
+        self.call("feedback",session_id=session["id"],attempt_id=answer["id"],text="已核對")
+        frame=self.call("finish",session_id=session["id"])["result"]["frames"][secondary]
+        self.assertTrue(frame["productions"][0]["target_independent"])
+        self.assertEqual(frame["independent_uses"],1)

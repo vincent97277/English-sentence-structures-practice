@@ -31,4 +31,3 @@ class RuntimeFixture(unittest.TestCase):
         self.call("assess", session_id=session["id"], attempt_id=answer["id"], target=target, expression=expression, reason="fixture evidence", **assessment)
         self.call("feedback", session_id=session["id"], attempt_id=answer["id"], text="已核對")
         return answer
-

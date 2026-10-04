@@ -111,3 +111,44 @@ class PolicyTests(RuntimeFixture):
         self.assertEqual(fresh["purpose"],"new")
         question=self.call("question",session_id=fresh["id"],text="真實練習",context="工作",kind="end")
         self.assertIsNone(question["delayed"])
+
+    def test_early_end_does_not_count_as_full_success_session_for_promotion(self):
+        self.seed()
+        first=self.call("start")
+        self.produce(first,"工作")
+        self.produce(first,"旅遊")
+        self.call("finish",session_id=first["id"])
+        self.day(8)
+        second=self.call("start")
+        self.produce(second,"新情境",kind="end")
+        self.call("finish",session_id=second["id"])
+        self.assertEqual(self.call("progress")["materials"][0]["state"],"Learning")
+
+    def test_saved_question_specific_cue_overrides_assessment_independence(self):
+        self.seed()
+        session=self.call("start")
+        question=self.call("question",session_id=session["id"],text="表達專案想法",context="工作",kind="end")
+        self.call("cue",session_id=session["id"],scope="target",text="I think this works.")
+        answer=self.call("answer",session_id=session["id"],question_id=question["id"],text="I think this works.")
+        self.call("assess",session_id=session["id"],attempt_id=answer["id"],target="pass",expression="pass",hints="none",reason="conflicting fixture classification")
+        self.call("feedback",session_id=session["id"],attempt_id=answer["id"],text="已核對")
+        frame=self.call("finish",session_id=session["id"])["result"]["frames"]["S001"]
+        self.assertEqual(frame["independent_uses"],0)
+        self.assertFalse(frame["productions"][0]["target_independent"])
+        self.assertEqual(self.call("progress")["materials"][0]["next_review"],"2026-10-06")
+
+    def test_unanswered_hinted_question_resets_delayed_baseline_without_progress_effect(self):
+        self.seed()
+        first=self.call("start")
+        self.produce(first,"工作",kind="end")
+        self.call("finish",session_id=first["id"])
+        self.day(8)
+        before=self.call("progress")
+        abandoned=self.call("start")
+        self.call("question",session_id=abandoned["id"],text="例句 I think this works.",context="例句展示",hints="target")
+        self.call("finish",session_id=abandoned["id"])
+        self.assertEqual(self.call("progress"),before)
+        followup=self.call("start",target="S001")
+        self.produce(followup,"餐廳",kind="end")
+        frame=self.call("finish",session_id=followup["id"])["result"]["frames"]["S001"]
+        self.assertFalse(frame["productions"][0]["delayed"])

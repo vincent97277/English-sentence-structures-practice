@@ -10,7 +10,7 @@
 | start | target 可選；synthetic 只供隔離測試 | id、primary、material 快照、secondary、purpose、reason、stage、revision |
 | resume | session_id 可選，否則未結算回合 | status、stage、events、revision、result、finish_operation_id |
 | history | session_id | immutable 原 result 及 events；修復以 diagnostics 另查看 |
-| cue | session_id、expected_revision、scope=target/language/unknown、text | 保存教材展示／提示；不當作回答 |
+| cue | session_id、expected_revision、target 可選固定主／穿插教材、scope=target/language/unknown、text、rule_keys 可選已知具體規則 key 陣列 | 保存教材展示／提示；不當作回答 |
 | question | session_id、expected_revision、text 中文背景與意圖、context 具體情境；target 預設主教材、kind=ordinary/end、new_context=true/false、hints=none/target/language/unknown | id 即 question_id；題目總数最多6、secondary 仅1題、end 仅1題且末題 |
 | answer | session_id、expected_revision、question_id、text 原聽寫 | id 即 attempt_id；stage assessment |
 | assess | session_id、expected_revision、attempt_id、target=pass/fail/unknown、expression=pass/fail/unknown、hints=none/target/language/unknown、reason 引用回答；extension 可選、weaknesses 預設 [] | 保存質性判斷；stage feedback |

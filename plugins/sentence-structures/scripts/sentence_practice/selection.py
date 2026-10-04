@@ -1,4 +1,5 @@
 from typing import Any, Dict, List
+from .policy import blocks_target
 
 
 def select(materials: List[Dict[str, Any]], history: List[Dict[str, Any]], weaknesses: Dict[str, Any], day: str, target: Any = None) -> Dict[str, Any]:
@@ -11,7 +12,7 @@ def select(materials: List[Dict[str, Any]], history: List[Dict[str, Any]], weakn
     due = [m for m in active if m.get("next_review") and m["next_review"] <= day and m["state"] != "New"]
     new = [m for m in active if m["state"] == "New"]
     def blocked(identifier: str) -> bool:
-        return any(w.get("status") == "active" and w.get("blocking") and (w.get("scope") == "global" or any(o.get("target") == identifier for o in w.get("opportunities", []))) for w in weaknesses.values())
+        return any(blocks_target(w, identifier) for w in weaknesses.values())
     due.sort(key=lambda m: (m["next_review"], not blocked(m["id"]), m["id"]))
     new.sort(key=lambda m: ({"Core": 0, "High": 1, "Useful": 2}[m["priority"]], m["id"]))
     force_new = len(history) >= 2 and all(r.get("purpose") == "review" for r in history[-2:]) and bool(new)

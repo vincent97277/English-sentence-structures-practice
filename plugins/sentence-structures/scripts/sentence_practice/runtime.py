@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from .materials import digest, encoded, material_hash, validate
-from .policy import POLICY, elapsed, frame, local_day, project
+from .policy import POLICY, affects_learning, elapsed, frame, local_day, project
 from .selection import select
 from .recovery import restore, verify
 from . import repair, migration
@@ -46,6 +46,7 @@ class Practice:
         self.root = Path(root).resolve()
         if self.root.is_relative_to(Path(__file__).resolve().parents[2]):
             raise PracticeError("learner data cannot live in the plugin package/cache")
+        self.marker: Dict[str, Any] = {}
         self.clock = clock or (lambda: datetime.now(timezone.utc).isoformat())
 
     def _connect(self) -> sqlite3.Connection:
@@ -79,6 +80,7 @@ class Practice:
             marker = self.root / "data/project.json"
             if request.get("project_id") and marker.exists() and request["project_id"] != json.loads(marker.read_text())["project_id"]:
                 raise PracticeError("wrong project identity")
+            self.marker = json.loads(marker.read_text()) if marker.exists() else {}
             return self._execute(request)
 
     def _execute(self, request: Dict[str, Any]) -> Dict[str, Any]:
@@ -223,9 +225,9 @@ class Practice:
                 if payload.get("new_session"):
                     raise PracticeError("finalize the existing session before requesting a new one")
                 return {**json.loads(active["body"]), "status": active["status"]}
-            marker = json.loads((self.root / "data/project.json").read_text())
+            marker = self.marker
             materials = [{**json.loads(row["body"]), **json.loads(row["progress"]), "active": bool(row["active"])} for row in db.execute("SELECT m.*,p.body progress FROM materials m JOIN progress p ON p.id=m.id")]
-            history = [r for r in self._accepted(db) if marker["test_mode"] or not r.get("synthetic")]
+            history = [r for r in self._accepted(db) if affects_learning(r, marker["test_mode"]) and r.get("frames")]
             weaknesses = {row["key"]: json.loads(row["body"]) for row in db.execute("SELECT * FROM weaknesses")}
             selection = select(materials, history, weaknesses, local_day(self.clock()), payload.get("target"))
             if operation == "select" or selection["primary"] is None:
@@ -261,7 +263,7 @@ class Practice:
         return {**json.loads(row["body"]), "status": row["status"]}
 
     def _events(self, db: sqlite3.Connection, session_id: str) -> Any:
-        return [{"kind": row["kind"], "at": row["at"], **json.loads(row["body"])} for row in db.execute("SELECT * FROM events WHERE session_id=? ORDER BY seq", (session_id,))]
+        return [{"seq": row["seq"], "kind": row["kind"], "at": row["at"], **json.loads(row["body"])} for row in db.execute("SELECT * FROM events WHERE session_id=? ORDER BY seq", (session_id,))]
 
     def _event(self, db: sqlite3.Connection, session_id: str, kind: str, value: Dict[str, Any]) -> None:
         db.execute("INSERT INTO events(session_id,kind,body,at) VALUES (?,?,?,?)", (session_id, kind, encoded(value), self.clock()))
@@ -276,16 +278,27 @@ class Practice:
             raise PracticeError("session is immutable or finalizing")
         if "expected_revision" in payload and payload["expected_revision"] != session.get("revision", 0):
             raise PracticeError("session revision conflict; resume before writing")
+        if operation != "pause":
+            session["status"] = "Active"
         value: Dict[str, Any] = {}
         if operation == "pause":
             session["status"] = "Paused"
         elif operation == "cue":
-            if payload.get("target", session["primary"]) != session["primary"] or payload.get("scope") not in {"target", "language", "unknown"} or not payload.get("text"):
-                raise PracticeError("cue requires primary target, scope and text")
-            value = {"target": session["primary"], "scope": payload["scope"], "text": payload["text"]}
+            target = payload.get("target", session["primary"])
+            targets = {session["primary"], session["secondary"]["id"] if session.get("secondary") else None}
+            if target not in targets or payload.get("scope") not in {"target", "language", "unknown"} or not payload.get("text"):
+                raise PracticeError("cue requires a pinned target, scope and text")
+            pending = next((e for e in events if e["kind"] == "question" and e["id"] == session.get("question_id")), None)
+            question_id = pending["id"] if session["stage"] == "answer" and pending and pending["target"] == target else None
+            rule_keys = payload.get("rule_keys", [])
+            if not isinstance(rule_keys, list) or any(not isinstance(key, str) or not key.strip() for key in rule_keys):
+                raise PracticeError("cue rule_keys must be stable rule identities")
+            value = {"target": target, "scope": payload["scope"], "text": payload["text"], "rule_keys": rule_keys, "question_id": question_id}
             self._event(db, session["id"], "cue", value)
-            if not session["synthetic"] or json.loads((self.root / "data/project.json").read_text())["test_mode"]:
-                db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (session["primary"], self.clock(), "cue-upper-bound"))
+            if affects_learning(session, self.marker["test_mode"]):
+                db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (target, self.clock(), "cue-saved-bound"))
+                for key in rule_keys:
+                    db.execute("INSERT OR REPLACE INTO rule_activity VALUES (?,?)", (key, self.clock()))
         elif operation == "question":
             if session["stage"] not in {"question", "ready"}:
                 raise PracticeError("save the outstanding answer, assessment and feedback first")
@@ -317,6 +330,8 @@ class Practice:
                 delayed = elapsed(self.clock(), previous[0]) and not any(e["kind"] == "cue" and e["target"] == target for e in events)
             value = {"id": uuid.uuid4().hex, "text": payload["text"], "context": payload["context"], "target": target, "probe": kind, "delayed": delayed, "new_context": payload.get("new_context", True), "hints": payload.get("hints", "none")}
             self._event(db, session["id"], "question", value)
+            if value["hints"] != "none" and affects_learning(session, self.marker["test_mode"]):
+                db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (target, self.clock(), "prompt-saved-bound"))
             session.update(stage="answer", question_id=value["id"], retry_of=None)
         elif operation == "retry":
             if session["stage"] != "ready":
@@ -330,7 +345,7 @@ class Practice:
             question = next(e for e in events if e["kind"] == "question" and e["id"] == payload["question_id"])
             value = {"id": uuid.uuid4().hex, "question_id": question["id"], "text": payload["text"], "retry_of": session.get("retry_of")}
             self._event(db, session["id"], "answer", value)
-            if not session["synthetic"] or json.loads((self.root / "data/project.json").read_text())["test_mode"]:
+            if affects_learning(session, self.marker["test_mode"]):
                 db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (question["target"], self.clock(), "practice-upper-bound"))
             session.update(stage="assessment", attempt_id=value["id"])
         elif operation in {"assess", "feedback"}:
@@ -351,7 +366,7 @@ class Practice:
                         raise PracticeError("opportunity needs specific rule identity, condition, deviation, scope, blocking and outcome")
                     previous = db.execute("SELECT at FROM rule_activity WHERE key=?", (observation["key"],)).fetchone()
                     observation["previous_at"] = previous[0] if previous else None
-                    if not session["synthetic"] or json.loads((self.root / "data/project.json").read_text())["test_mode"]:
+                    if affects_learning(session, self.marker["test_mode"]):
                         db.execute("INSERT OR REPLACE INTO rule_activity VALUES (?,?)", (observation["key"], self.clock()))
                 value = {"attempt_id": payload["attempt_id"], "target": payload["target"], "expression": payload["expression"], "hints": payload.get("hints", "none"), "reason": payload["reason"], "extension": bool(payload.get("extension")), "weaknesses": observations}
                 session["stage"] = "feedback"
@@ -362,13 +377,13 @@ class Practice:
                     raise PracticeError("feedback text is required")
                 value = {"attempt_id": payload["attempt_id"], "text": payload["text"], "hint": payload.get("hint", "none")}
                 session["stage"] = "ready"
-                if value["hint"] != "none" and (not session["synthetic"] or json.loads((self.root / "data/project.json").read_text())["test_mode"]):
+                if value["hint"] != "none" and (affects_learning(session, self.marker["test_mode"])):
                     answer = next(e for e in events if e["kind"] == "answer" and e["id"] == payload["attempt_id"])
                     question = next(e for e in events if e["kind"] == "question" and e["id"] == answer["question_id"])
                     db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (question["target"], self.clock(), "cue-upper-bound"))
                     assessment: Any = next((e for e in reversed(events) if e["kind"] == "assess" and e["attempt_id"] == payload["attempt_id"]), {})
                     for observation in assessment.get("weaknesses", []):
-                        if not session["synthetic"] or json.loads((self.root / "data/project.json").read_text())["test_mode"]:
+                        if affects_learning(session, self.marker["test_mode"]):
                             db.execute("INSERT OR REPLACE INTO rule_activity VALUES (?,?)", (observation["key"], self.clock()))
             self._event(db, session["id"], operation, value)
         elif operation == "correct":
@@ -399,6 +414,8 @@ class Practice:
         for relative in ("materials", "data/imports", "data/requests", "data/project.json", ".codex/config.toml"):
             source = self.root / relative
             target = destination / relative
+            if source.is_symlink() or (source.is_dir() and any(p.is_symlink() for p in source.rglob("*"))):
+                raise PracticeError("checkpoint source contains symlink: " + relative)
             if source.is_dir():
                 shutil.copytree(source, target)
             elif source.is_file():
@@ -408,6 +425,8 @@ class Practice:
         shutil.copytree(plugin, destination / "runtime", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         for name in ("schemas", "docs/adr", "docs/material-source-format.md"):
             source = self.root / name
+            if source.is_symlink() or (source.is_dir() and any(p.is_symlink() for p in source.rglob("*"))):
+                raise PracticeError("checkpoint source contains symlink: " + relative)
             if source.is_dir():
                 shutil.copytree(source, destination / name)
             elif source.is_file():
@@ -442,19 +461,22 @@ class Practice:
             for answer in answers:
                 assessment = assessments.get(answer["id"], {"target": "unknown", "expression": "unknown", "hints": "unknown"})
                 question = questions[answer["question_id"]]
-                target_independent = not answer["retry_of"] and assessment["hints"] in {"none", "language"} and question["hints"] in {"none", "language"}
-                independent = target_independent and assessment["hints"] == question["hints"] == "none"
-                production = {"attempt_id": answer["id"], "text": corrections.get(answer["id"], answer)["text"], "original_text": answer["text"], "context": question["context"], "question_id": question["id"], "first": not answer["retry_of"], "target": assessment["target"], "expression": assessment["expression"], "independent": independent, "target_independent": target_independent, "probe": question["probe"], "delayed": not productions and question["delayed"] is True and question["new_context"] and independent and assessment["expression"] == assessment["target"] == "pass", "new_context": question["new_context"], "extension": assessment.get("extension", False), "hints": assessment["hints"], "question_hints": question["hints"], "feedback_hint": feedbacks.get(answer["id"], {}).get("hint", "none"), "weaknesses": assessment.get("weaknesses", []), "reason": assessment.get("reason", "missing assessment"), "at": answer["at"], "time_source": "platform-received-upper-bound"}
+                cues = [e for e in events if e["kind"] == "cue" and e["target"] == target and e.get("question_id") == question["id"] and e["seq"] < answer["seq"]]
+                scopes = {question["hints"], *(e["scope"] for e in cues)}
+                question_hints = next((scope for scope in ("unknown", "target", "language") if scope in scopes), "none")
+                target_independent = not answer["retry_of"] and assessment["hints"] in {"none", "language"} and question_hints in {"none", "language"}
+                independent = target_independent and assessment["hints"] == question_hints == "none"
+                production = {"attempt_id": answer["id"], "text": corrections.get(answer["id"], answer)["text"], "original_text": answer["text"], "context": question["context"], "question_id": question["id"], "first": not answer["retry_of"], "target": assessment["target"], "expression": assessment["expression"], "independent": independent, "target_independent": target_independent, "probe": question["probe"], "delayed": not productions and question["delayed"] is True and question["new_context"] and independent and assessment["expression"] == assessment["target"] == "pass", "new_context": question["new_context"], "extension": assessment.get("extension", False), "hints": assessment["hints"], "question_hints": question_hints, "cue_events": [e["seq"] for e in cues], "feedback_hint": feedbacks.get(answer["id"], {}).get("hint", "none"), "weaknesses": assessment.get("weaknesses", []), "reason": assessment.get("reason", "missing assessment"), "at": answer["at"], "time_source": "platform-received-upper-bound"}
                 production["delayed_eligible"] = not productions and question["delayed"] is True and question["new_context"] and independent
                 productions.append(production)
             if productions:
                 result["frames"][target] = frame(productions, target == session["primary"])
         progress = {row["id"]: json.loads(row["body"]) for row in db.execute("SELECT * FROM progress")}
         weaknesses = {row["key"]: json.loads(row["body"]) for row in db.execute("SELECT * FROM weaknesses")}
-        marker = json.loads((self.root / "data/project.json").read_text())
-        if result["synthetic"] and not marker["test_mode"]:
+        marker = self.marker
+        if not affects_learning(result, marker["test_mode"]):
             return result, {"progress": {}, "weaknesses": weaknesses}
-        history = [r for r in self._accepted(db) if marker["test_mode"] or not r.get("synthetic")]
+        history = [r for r in self._accepted(db) if affects_learning(r, marker["test_mode"]) and r.get("frames")]
         changes, ledger = project(result, history, progress, weaknesses)
         return result, {"progress": changes, "weaknesses": ledger}
 
@@ -476,6 +498,18 @@ class Practice:
                 if frozen["operation_id"] != identity or frozen["request_hash"] != request_hash:
                     raise PracticeError("resume using the frozen finalization identity")
             else:
+                # An unanswered prompt has no received-answer upper bound. The
+                # end request conservatively bounds any earlier displayed cue.
+                events = self._events(db, session["id"])
+                answered_questions = {e["question_id"] for e in events if e["kind"] == "answer"}
+                if affects_learning(session, self.marker["test_mode"]):
+                    for event in events:
+                        if event["kind"] == "cue" and not any(e["kind"] == "answer" and e["seq"] > event["seq"] for e in events):
+                            db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (event["target"], self.clock(), "cue-finalization-upper-bound"))
+                            for key in event.get("rule_keys", []):
+                                db.execute("INSERT OR REPLACE INTO rule_activity VALUES (?,?)", (key, self.clock()))
+                        if event["kind"] == "question" and event["hints"] != "none" and event["id"] not in answered_questions:
+                            db.execute("INSERT OR REPLACE INTO activity VALUES (?,?,?)", (event["target"], self.clock(), "prompt-finalization-upper-bound"))
                 result, plan = self._compute_result(db, session)
                 result["finalization_request"] = deepcopy(request)
                 db.execute("INSERT INTO results VALUES (?,?,?,?,?)", (session["id"], encoded(result), encoded(plan), identity, request_hash))
