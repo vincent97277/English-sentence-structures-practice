@@ -1,0 +1,12 @@
+{
+  "format": "sentence-materials/v1",
+  "source": "格式示例：以原 Structures S001 示範新來源不填本地 ID；並非正式新增教材",
+  "items": [
+    {
+      "pattern": "I think + clause",
+      "purpose": "表達自己的看法或判斷。",
+      "examples": ["I think we need more time."],
+      "notes": "一般否定可練 `I don't think…`。"
+    }
+  ]
+}

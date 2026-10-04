@@ -1,0 +1,28 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sentence-structures",
+  "version": "0.1.1",
+  "description": "Local English sentence practice with Codex dictation, durable sessions and reviewed material imports.",
+  "author": {
+    "name": "Vincent Lin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "句型練習",
+        "shortDescription": "聽寫練習、接續紀錄與本地教材匯入",
+        "longDescription": "以中文情境引導英文表達，逐題保存並於結束時結算；教材與練習紀錄留在目前專案。",
+        "developerName": "Vincent Lin",
+        "category": "Education & Research",
+        "capabilities": [
+          "skills"
+        ],
+        "defaultPrompt": [
+          "開始句型練習",
+          "查看練習進度",
+          "匯入新的句型教材"
+        ]
+      }
+    }
+  }
+}

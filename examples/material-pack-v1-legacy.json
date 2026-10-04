@@ -1,0 +1,25 @@
+{
+  "format": "sentence-materials/v1",
+  "source": "格式示例：原 Structures https://app.notion.com/p/55d79b4abc494ec59c7614381b9087c3；僅展示 S001 與 S089，並非完整匯出",
+  "items": [
+    {
+      "id": "S001",
+      "pattern": "I think + clause",
+      "purpose": "表達自己的看法或判斷。",
+      "examples": ["I think we need more time."],
+      "notes": "一般否定可練 `I don't think…`。",
+      "priority": "Core"
+    },
+    {
+      "id": "S089",
+      "pattern": "subject + might / may / could + V",
+      "purpose": "表達尚未確定的可能性。",
+      "examples": [
+        "The delay might be caused by a network issue.",
+        "It might be a bit of a hassle."
+      ],
+      "notes": "此處聚焦推測；三者並非處處互換。",
+      "priority": "Core"
+    }
+  ]
+}

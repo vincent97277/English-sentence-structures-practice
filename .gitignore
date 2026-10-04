@@ -1,0 +1,13 @@
+data/
+materials/
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.DS_Store
+.codex/
+.agents/
+
+sentence-structures-requirements.md
+sentence-structures-implementation-spec.md
