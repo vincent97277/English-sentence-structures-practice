@@ -1,6 +1,6 @@
 # 實作與驗收紀錄
 
-目前狀態（2026-10-05）：約定功能驗收已全部完成，plugin 0.1.3 已安裝；31項測試／mypy通過，桌面暫停／跨聊天接續及即時更正已共同實測，17個 Applied 回合的最新匯出／隔離還原相符，沒有未結算回合。詳見[最終驗收結果](acceptance.md)。以下保留先前實作及驗收快照；GitHub push／Issue更新尚未執行。
+目前狀態（2026-10-05）：約定功能驗收已全部完成，plugin 0.1.3 已安裝；31項測試／mypy通過，桌面暫停／跨聊天接續及即時更正已共同實測，17個 Applied 回合的最新匯出／隔離還原相符，沒有未結算回合。詳見[最終驗收結果](acceptance.md)。以下保留先前實作及驗收快照；工程發布與 CI 結果見 [GitHub Issue #1](https://github.com/vincent97277/English-sentence-structures-practice/issues/1) 完成紀錄。
 
 2026-10-05，使用者呼叫 implement 授權落實 Issue #1，並確認 code-review 比較基準為開工前 main `290ca79bcc79a65cdbc9d4c5446242cd98fb6987`。整合規格中「本輪不實作／未取得總確認」描述的是 to-spec 當時狀態，已由後續 implement 授權更新。本次採用 JSON 可編輯來源＋SQLite 已接受快照、新教材缺省 High，以及「同步／幫我保存」結算、「保存了嗎」只讀的設計建議。
 
