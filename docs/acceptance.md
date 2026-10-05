@@ -38,3 +38,9 @@
 個人驗收證據留於 Git 排除的 `data/acceptance/2026-10-05/`，包含 report、公開 history／progress／diagnostics、plugin-scope、export 及 restore-verification；完整新備份位於 export 所指的 `data/backups/`。實際回答及聊天身份不加入程式提交。
 
 第二次核對的讀回、plugin-discovery、新備份及還原證據另存同資料夾的 `followup/`，保留首次快照。
+
+## 第三次核對
+
+使用者詢問驗收是否全部結束時，再以公開 resume／diagnostics 及最近桌面聊天確認：S003 已完成5題並以安裝版0.1.3成功結算；目前共16個 Applied 回合，沒有未結算回合，integrity=ok。先前「等待第3題」是第二次核對時的快照，已由此結果更新。
+
+整體驗收仍未全部結束：尚無桌面 pause 請求／執行紀錄；0.1.3 的「下一題等待回答時立即更正上一題」已有隔離回歸測試，但尚無新版桌面實測證據。已完成的0.1.2更正及0.1.3結算不能代替這兩项驗收。此次沒有程式修改或重跑既已通過的31項測試；最新公開讀回留於 `data/acceptance/2026-10-05/latest/`。
