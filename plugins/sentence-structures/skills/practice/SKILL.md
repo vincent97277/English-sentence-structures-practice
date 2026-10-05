@@ -31,6 +31,8 @@ description: "Use for English sentence-structure practice in the current sentenc
 
 接續以已保存 stage 為準：answer 等使用者回答；assessment 評估已存回答；feedback 保存評估後的回饋；ready 出下一題或重試。Finalizing 時直接重送 resume 回傳的 finalization_request，不能更換 identity 或添加 payload。若尚有原請求檔，直接沿用。
 
+下一題已出題但尚未回答時，也可立即 correct 上一題，不要求使用者先回答下一題。完成更正的 assess／feedback 後，重新 resume；程式會回到先前等待的題目及階段，沿用原 question_id，不另出一題。若更正回饋對等待中的同句型題提供實質提示，程式會保存 cue，評估須依最新事件記錄提示範圍。
+
 ## 出題與教學
 
 start 回傳主教材、原因、purpose 及最多一個 secondary；不得自行替換演算法選題。使用者指定教材可傳 target。沒有候選就說明下一到期日，讓使用者決定是否提前練習；不自造教材。New 先短述用途並展示一個例句，以 cue 保存所展示的內容；review 開始只說用途與選題理由，不展示英文句型公式、例句或句首提示，先提取。

@@ -7,6 +7,57 @@ from sentence_practice import Practice, PracticeError
 
 
 class ReliabilityTests(RuntimeFixture):
+    def test_correction_resumes_pending_question_across_pause_and_new_runtime(self):
+        self.seed()
+        session = self.call("start")
+        original = self.produce(session, "會議", target="fail")
+        pending = self.call("question", session_id=session["id"], text="請表達延期看法", context="延期", kind="end")
+        self.call("correct", session_id=session["id"], attempt_id=original["id"], text="I think we need less time.", reason="聽寫把 less 辨識為 more")
+        self.call("pause", session_id=session["id"])
+        self.api = Practice(self.root, clock=lambda: "2026-10-05T09:00:00+08:00")
+        recovered = self.call("resume")
+        self.assertEqual((recovered["status"], recovered["stage"], recovered["attempt_id"]), ("Paused", "assessment", original["id"]))
+        self.call("assess", session_id=session["id"], attempt_id=original["id"], target="pass", expression="pass", reason="更正後意思正確")
+        self.call("feedback", session_id=session["id"], attempt_id=original["id"], text="已更正", hint="none")
+        recovered = self.call("resume")
+        self.assertEqual((recovered["stage"], recovered["question_id"], recovered["retry_of"]), ("answer", pending["id"], None))
+        answer = self.call("answer", session_id=session["id"], question_id=pending["id"], text="I think we need more time.")
+        self.call("assess", attempt_id=answer["id"], target="pass", expression="pass", reason="獨立回答")
+        self.call("feedback", attempt_id=answer["id"], text="正確")
+        result = self.call("finish", session_id=session["id"])["result"]["frames"]["S001"]
+        self.assertEqual(len(result["productions"]), 2)
+        self.assertEqual(result["productions"][0]["original_text"], "I think we need more time.")
+        self.assertEqual(result["productions"][0]["text"], "I think we need less time.")
+        self.assertTrue(result["productions"][1]["independent"])
+        self.assertEqual(result["probe"], "pass")
+
+    def test_corrective_hint_marks_pending_question_as_assisted(self):
+        self.seed()
+        session = self.call("start")
+        original = self.produce(session, "會議")
+        pending = self.call("question", session_id=session["id"], text="請表達延期看法", context="延期", kind="end")
+        self.call("correct", attempt_id=original["id"], text="I think we need less time.", reason="聽寫更正")
+        self.call("assess", attempt_id=original["id"], target="pass", expression="pass", reason="更正後評估")
+        self.call("feedback", attempt_id=original["id"], text="可以用 I think + clause", hint="target")
+        answer = self.call("answer", question_id=pending["id"], text="I think we need more time.")
+        self.call("assess", attempt_id=answer["id"], target="pass", expression="pass", reason="回饋後回答")
+        self.call("feedback", attempt_id=answer["id"], text="正確")
+        result = self.call("finish")["result"]["frames"]["S001"]
+        self.assertFalse(result["productions"][1]["target_independent"])
+        self.assertEqual(result["productions"][1]["question_hints"], "target")
+
+    def test_correction_preserves_ready_attempt_for_retry(self):
+        self.seed()
+        session = self.call("start")
+        original = self.produce(session, "會議")
+        latest = self.produce(session, "延期")
+        self.call("correct", attempt_id=original["id"], text="I think we need less time.", reason="聽寫更正")
+        self.call("assess", attempt_id=original["id"], target="pass", expression="pass", reason="更正後評估")
+        self.call("feedback", attempt_id=original["id"], text="已更正")
+        self.call("retry")
+        resumed = self.call("resume")
+        self.assertEqual((resumed["question_id"], resumed["retry_of"]), (latest["question_id"], latest["id"]))
+
     def test_checkpoint_failure_keeps_frozen_identity_and_resumes_without_recount(self):
         self.seed()
         session = self.call("start")

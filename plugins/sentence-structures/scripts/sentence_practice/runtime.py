@@ -385,15 +385,26 @@ class Practice:
                     for observation in assessment.get("weaknesses", []):
                         if affects_learning(session, self.marker["test_mode"]):
                             db.execute("INSERT OR REPLACE INTO rule_activity VALUES (?,?)", (observation["key"], self.clock()))
+                continuation = session.pop("correction_return", None)
+                if continuation:
+                    if continuation["stage"] == "answer" and value["hint"] != "none":
+                        pending = next(e for e in events if e["kind"] == "question" and e["id"] == continuation["question_id"])
+                        corrected = next(e for e in events if e["kind"] == "answer" and e["id"] == payload["attempt_id"])
+                        previous = next(e for e in events if e["kind"] == "question" and e["id"] == corrected["question_id"])
+                        if pending["target"] == previous["target"]:
+                            self._event(db, session["id"], "cue", {"target": pending["target"], "scope": value["hint"], "text": value["text"], "rule_keys": [], "question_id": pending["id"]})
+                    session.update(continuation)
             self._event(db, session["id"], operation, value)
         elif operation == "correct":
             if not payload.get("text") or not payload.get("reason") or not any(e["kind"] == "answer" and e["id"] == payload.get("attempt_id") for e in events):
                 raise PracticeError("correction needs original attempt, text and reason")
-            if session["stage"] not in {"assessment", "feedback", "ready"}:
+            if session["stage"] not in {"answer", "assessment", "feedback", "ready"}:
                 raise PracticeError("resolve the outstanding answer before correcting another attempt")
             if session["stage"] in {"assessment", "feedback"} and payload["attempt_id"] != session.get("attempt_id"):
                 raise PracticeError("complete the current attempt before correcting an earlier one")
             original = next(e for e in events if e["kind"] == "answer" and e["id"] == payload["attempt_id"])
+            if session["stage"] == "answer" or (session["stage"] == "ready" and payload["attempt_id"] != session.get("attempt_id")):
+                session["correction_return"] = {key: session.get(key) for key in ("stage", "question_id", "attempt_id", "retry_of")}
             session["question_id"] = original["question_id"]
             value = {"attempt_id": payload["attempt_id"], "text": payload["text"], "reason": payload["reason"]}
             self._event(db, session["id"], "correction", value)
